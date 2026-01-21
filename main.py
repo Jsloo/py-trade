@@ -6,6 +6,9 @@ from execution.order_executor import OrderExecutor
 from strategies.ma_crossover import MACrossoverStrategy
 import requests
 
+from strategies.order_flow_strategy import OrderFlowStrategy
+
+
 def main():
     msg = "🤖 *量化系统已启动*\n" + f"交易对: {config.SYMBOL}\n策略: MA Crossover"
     send_telegram_msg(msg)
@@ -14,7 +17,7 @@ def main():
     # 1. 实例化各个模块
     data_loader = BinanceLoader()
     executor = OrderExecutor()
-    strategy = MACrossoverStrategy(short_window=3, long_window=5)
+    strategy = OrderFlowStrategy()
 
     # 简单的状态标记 (实际项目中建议通过 executor.get_balance 动态判断持仓)
     is_holding = False
@@ -25,10 +28,11 @@ def main():
     while True:
         # Step 1: 获取数据
         df = data_loader.get_ohlcv()
+        adv_data = data_loader.get_advanced_data(config.SYMBOL)  # 获取高级数据
 
-        if df is not None:
+        if df is not None and adv_data:
             # Step 2: 策略分析
-            signal = strategy.analyze(df)
+            signal = strategy.analyze(df, adv_data)
             current_price = df['close'].iloc[-1]
             print(f"[{df['timestamp'].iloc[-1]}] 价格: {current_price} | 信号: {signal}")
 
@@ -38,7 +42,7 @@ def main():
                 # 检查可用余额是否足够
                 if usdt_balance >= config.MARGIN_AMOUNT:
                     # 传入金额，并指定 amount_is_usdt=True
-                    order = executor.place_market_order(config.SYMBOL, 'buy', config.MARGIN_AMOUNT, config.LEVERAGE)
+                    order = executor.place_order_with_tp_sl(config.SYMBOL, 'buy', config.MARGIN_AMOUNT, config.LEVERAGE)
                     if order:
                         is_holding = True
                         # 记录下单时的成交数量，方便以后平仓
@@ -55,7 +59,7 @@ def main():
             elif signal == 'SELL' and is_holding:
                 # 平仓建议：直接平掉之前记录的成交数量
                 if holding_quantity > 0:
-                    order = executor.place_market_order(config.SYMBOL, 'sell', holding_quantity, config.LEVERAGE)
+                    order = executor.place_order_with_tp_sl(config.SYMBOL, 'sell', holding_quantity, config.LEVERAGE)
                     if order:
                         send_telegram_msg(
                             f"🔻 *【多单平仓】*\n"

@@ -107,3 +107,51 @@ class OrderExecutor:
         except Exception as e:
             print(f"❌ 下单失败: {e}")
             return None
+
+    def place_order_with_tp_sl(self, symbol, side, margin_amount, leverage, tp_percent=0.02, sl_percent=0.01):
+        """
+        下单并附带止盈止损
+        :param tp_percent: 2% 止盈
+        :param sl_percent: 1% 止损
+        """
+        try:
+            # 1. 先开主仓位 (市价单)
+            main_order = self.place_market_order(symbol, side, margin_amount, leverage)
+            if not main_order: return None
+
+            avg_price = float(main_order['average'])
+            quantity = float(main_order['filled'])
+
+            # 2. 计算止盈止损价格
+            if side == 'buy':
+                tp_price = avg_price * (1 + tp_percent)
+                sl_price = avg_price * (1 - sl_percent)
+                close_side = 'sell'
+            else:
+                tp_price = avg_price * (1 - tp_percent)
+                sl_price = avg_price * (1 + sl_percent)
+                close_side = 'buy'
+
+            # 3. 提交止损单 (STOP_MARKET)
+            self.exchange.create_order(
+                symbol=symbol,
+                type='STOP_MARKET',
+                side=close_side,
+                amount=quantity,
+                params={'stopPrice': self.exchange.price_to_precision(symbol, sl_price)}
+            )
+
+            # 4. 提交止盈单 (TAKE_PROFIT_MARKET)
+            self.exchange.create_order(
+                symbol=symbol,
+                type='TAKE_PROFIT_MARKET',
+                side=close_side,
+                amount=quantity,
+                params={'stopPrice': self.exchange.price_to_precision(symbol, tp_price)}
+            )
+
+            print(f"🎯 止盈已设: {tp_price}, 止损已设: {sl_price}")
+            return main_order
+
+        except Exception as e:
+            print(f"止盈止损设置失败: {e}")

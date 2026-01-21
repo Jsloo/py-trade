@@ -68,6 +68,36 @@ class BinanceLoader:
 
         return None
 
+    def get_advanced_data(self, symbol):
+        """获取持仓量(OI)、资金费率、最近成交数据"""
+        try:
+            # 1. 获取当前持仓量 (Open Interest)
+            # 格式：BTCUSDT
+            market_id = self.exchange.market(symbol)['id']
+            oi_data = self.exchange.fapiPublicGetOpenInterest({'symbol': market_id})
+            oi = float(oi_data['openInterest'])
+
+            # 2. 获取资金费率 (Funding Rate)
+            funding_data = self.exchange.fetch_funding_rate(symbol)
+            funding_rate = funding_data['fundingRate']
+
+            # 3. 获取 CVD (Cumulative Volume Delta) 需要分析最近的 Ticks
+            # 简化版逻辑：获取最近 500 笔成交，计算主动买入 vs 主动卖出
+            trades = self.exchange.fetch_trades(symbol, limit=500)
+            buy_vol = sum(float(t['amount']) for t in trades if t['side'] == 'buy')
+            sell_vol = sum(float(t['amount']) for t in trades if t['side'] == 'sell')
+            delta = buy_vol - sell_vol  # 这就是 Delta Bar 的核心
+
+            return {
+                'oi': oi,
+                'funding_rate': funding_rate,
+                'delta': delta,
+                'cvd': buy_vol / sell_vol if sell_vol != 0 else 1
+            }
+        except Exception as e:
+            print(f"数据获取失败: {e}")
+            return None
+
     def get_current_price(self, symbol=config.SYMBOL):
         """获取当前最新成交价"""
         try:
