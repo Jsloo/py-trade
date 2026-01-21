@@ -13,7 +13,6 @@ class BinanceLoader:
     def __init__(self):
         """初始化交易所连接（仅用于读取数据）"""
         # 1. 强制代理环境变量（确保数据拉取不被墙）
-        import os
         os.environ['http_proxy'] = 'http://127.0.0.1:7890'
         os.environ['https_proxy'] = 'http://127.0.0.1:7890'
 
